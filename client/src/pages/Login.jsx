@@ -2,16 +2,17 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getError } from '../api/axios';
- 
+import AuthLayout from '../components/AuthLayout';
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
- 
+
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
- 
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -25,28 +26,29 @@ export default function Login() {
       setBusy(false);
     }
   };
- 
+
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <form onSubmit={handleSubmit} className="card w-full max-w-sm space-y-4">
-        <h1 className="text-2xl font-bold">Log in</h1>
-        {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+    <AuthLayout title="Welcome back" subtitle="Log in to continue to Kaajkormo.">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         <div>
-          <label className="label">Email</label>
-          <input className="input" type="email" name="email" value={form.email} onChange={handleChange} required />
+          <label className="label" htmlFor="email">Email</label>
+          <input id="email" className="input" type="email" name="email" autoComplete="email"
+            value={form.email} onChange={handleChange} required />
         </div>
         <div>
-          <label className="label">Password</label>
-          <input className="input" type="password" name="password" value={form.password} onChange={handleChange} required />
+          <label className="label" htmlFor="password">Password</label>
+          <input id="password" className="input" type="password" name="password" autoComplete="current-password"
+            value={form.password} onChange={handleChange} required />
         </div>
-        <button className="btn-primary w-full" disabled={busy}>
+        <button className="btn-primary w-full py-2.5" disabled={busy}>
           {busy ? 'Logging in...' : 'Log in'}
         </button>
         <p className="text-center text-sm text-slate-600">
-          No account yet?{' '}
-          <Link to="/register" className="text-indigo-600 hover:underline">Register</Link>
+          New to Kaajkormo?{' '}
+          <Link to="/register" className="font-medium text-indigo-600 hover:underline">Create an account</Link>
         </p>
       </form>
-    </div>
+    </AuthLayout>
   );
 }
