@@ -1,4 +1,3 @@
-Open this file and paste: client/src/pages/Profile.jsx
 import { useState } from 'react';
 import api, { getError } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
@@ -97,4 +96,3 @@ export default function Profile() {
     </div>
   );
 }
-

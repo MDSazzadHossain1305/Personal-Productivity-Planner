@@ -1,7 +1,6 @@
-Open this file and paste: client/src/components/Layout.jsx
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
- 
+
 const links = [
   { to: '/', label: 'Home', end: true },
   { to: '/tasks', label: 'Tasks' },
@@ -9,16 +8,16 @@ const links = [
   { to: '/notes', label: 'Notes' },
   { to: '/profile', label: 'Profile' },
 ];
- 
+
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
- 
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
- 
+
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <aside className="flex shrink-0 flex-col gap-1 bg-slate-900 p-4 text-slate-200 md:w-56">
@@ -53,4 +52,3 @@ export default function Layout() {
     </div>
   );
 }
-
