@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+/*
+  Kaajkormo theme, ported from the "Grunge" Astro template by Jess Gaspar (MIT licence).
+  Same colour scale, fonts and type sizes as the template's global.css.
+*/
+@theme {
+  /* COLORS (from the template) */
+  --color-base-100: oklch(14% 0.004 49.25);
+  --color-base-200: oklch(21% 0.006 56.043);
+  --color-base-300: oklch(26% 0.007 34.298);
+  --color-base-400: oklch(37% 0.01 67.558);
+  --color-base-500: oklch(44% 0.011 73.639);
+  --color-base-600: oklch(55% 0.013 58.071);
+  --color-base-700: oklch(70% 0.01 56.259);
+  --color-base-800: oklch(86% 0.005 56.366);
+  --color-base-900: oklch(98% 0.001 106.423);
+
+  /* Names used by the app pages */
+  --color-night: var(--color-base-100);   /* page background */
+  --color-surface: var(--color-base-200); /* panels */
+  --color-raised: var(--color-base-300);  /* hover, headers */
+  --color-line: var(--color-base-500);    /* thin dividers */
+  --color-paper: var(--color-base-900);   /* main text, borders */
+  --color-muted: var(--color-base-700);   /* secondary text */
+  --color-faint: var(--color-base-600);   /* hints */
+  --color-brass: oklch(84% 0.13 92);      /* the one accent: today, active, links */
+  --color-brass-soft: oklch(90% 0.1 95);
+  --color-sage: oklch(80% 0.09 150);      /* done / success */
+  --color-rose: oklch(72% 0.14 25);       /* overdue / danger */
+
+  /* FONTS (from the template) */
+  --font-grunge: "Road Rage", "Impact", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --font-sans: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* TEXT SIZES (from the template) */
+  --text-216: 13.5rem;
+  --text-128: 8rem;
+  --text-96: 6rem;
+  --text-80: 5rem;
+  --text-64: 4rem;
+  --text-48: 3rem;
+  --text-40: 2.5rem;
+  --text-32: 2rem;
+  --text-24: 1.5rem;
+  --text-20: 1.25rem;
+  --text-16: 1rem;
+  --text-12: 0.75rem;
+
+  /* square corners everywhere, like the template (rounded-full still works) */
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+
+  --animate-spin: spin 5s linear infinite;
+}
+
+@utility btn {
+  @apply inline-flex cursor-pointer items-center justify-center gap-2 border-2 px-5 py-1 font-grunge text-2xl uppercase leading-tight tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@layer base {
+  :root { color-scheme: dark; }
+  html { scroll-behavior: smooth; }
+  body {
+    @apply bg-night font-mono text-paper antialiased;
+    background-image: url("/img/bg.jpg");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+  }
+  /* film grain over the whole site (the template does this with the tailwindcss-noise plugin) */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.22;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  #root { position: relative; z-index: 2; }
+  ::selection { background: var(--color-paper); color: var(--color-night); }
+  :focus-visible { outline: 2px solid var(--color-brass); outline-offset: 2px; }
+  select option { background: var(--color-base-200); color: var(--color-paper); }
+}
+
+@layer components {
+  .page-title { @apply font-grunge text-64 uppercase leading-none tracking-tight text-paper md:text-80; }
+  .heading { @apply font-grunge uppercase leading-none text-paper; }
+  .btn-primary { @apply btn border-paper bg-paper text-night hover:bg-transparent hover:text-paper; }
+  .btn-ghost { @apply btn border-paper bg-transparent text-paper hover:bg-paper hover:text-night; }
+  .btn-danger { @apply btn border-rose bg-transparent text-rose hover:bg-rose hover:text-night; }
+  .btn-sm { @apply !border !px-2.5 !py-1 !font-mono !text-xs !font-semibold !tracking-normal; }
+  .input { @apply w-full border-2 border-base-600 bg-night/70 px-3 py-2 font-mono text-sm text-paper placeholder:text-faint outline-none transition-colors focus:border-paper; }
+  .label { @apply mb-1.5 block font-mono text-xs font-semibold uppercase tracking-wider text-muted; }
+  .card { @apply border-2 border-paper bg-night/60 p-5; }
+  .alert-error { @apply border-2 border-rose bg-rose/10 p-3 text-sm text-rose; }
+  .alert-ok { @apply border-2 border-sage bg-sage/10 p-3 text-sm text-sage; }
+  .link { @apply font-semibold text-paper underline underline-offset-4 hover:text-muted; }
+  .photo { @apply h-full w-full object-cover grayscale-75; }
+}
