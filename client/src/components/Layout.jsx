@@ -5,7 +5,7 @@ import Logo from './Logo';
 import { FrameBottom } from './Grunge';
 
 // The menu is a set of raised keys, grouped by what the pages are for.
-// The look of a key (.key) is in index.css. Each key has a small line icon (24 x 24 drawing).
+// The look of a key (.key) is in keyStyles below. Each key has a small line icon (24 x 24 drawing).
 const sections = [
   {
     title: 'Planning',
@@ -41,6 +41,88 @@ const sections = [
   },
 ];
 
+// The 3D look of the menu buttons. It lives here, in the same file as the menu, and is added
+// to the page with a <style> tag, so the menu and its look can never get out of step.
+const keyStyles = `
+.key {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid #5f594e;
+  border-radius: 10px;
+  color: #1b1916;
+  /* the top face: bright at the top, darker at the bottom, like light from above */
+  background: linear-gradient(180deg, #fbf8f2 0%, #ece6da 45%, #d8d0c0 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.95), /* shine along the top edge */
+    inset 0 -3px 0 rgba(0, 0, 0, 0.12), /* lower edge of the face */
+    0 7px 0 0 #8d8474, /* the thick side of the button */
+    0 7px 0 1px #3a352d, /* outline of the side */
+    0 11px 12px rgba(0, 0, 0, 0.55), /* close shadow */
+    0 22px 30px rgba(0, 0, 0, 0.45); /* far, soft shadow */
+  transform: translateY(0);
+  transition: transform 90ms ease, box-shadow 90ms ease;
+}
+/* hover: the button rises and the shadow spreads */
+.key:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.12),
+    0 9px 0 0 #8d8474,
+    0 9px 0 1px #3a352d,
+    0 15px 16px rgba(0, 0, 0, 0.55),
+    0 28px 38px rgba(0, 0, 0, 0.45);
+}
+/* while clicking: pushed all the way down */
+.key:active {
+  transform: translateY(6px);
+  box-shadow:
+    inset 0 3px 6px rgba(0, 0, 0, 0.25),
+    0 1px 0 0 #8d8474,
+    0 1px 0 1px #3a352d,
+    0 3px 5px rgba(0, 0, 0, 0.6);
+}
+/* the current page: stays pressed down, with a gold face */
+.key[aria-current='page'],
+.key[aria-current='page']:hover {
+  transform: translateY(6px);
+  background: linear-gradient(180deg, #f6dd8c 0%, #e8c75c 50%, #cfa940 100%);
+  box-shadow:
+    inset 0 3px 6px rgba(0, 0, 0, 0.3), /* the face looks sunk in */
+    inset 0 -1px 0 rgba(255, 255, 255, 0.5),
+    0 1px 0 0 #8a6f22,
+    0 1px 0 1px #3a352d,
+    0 3px 5px rgba(0, 0, 0, 0.6);
+}
+/* the icon sits in a round, engraved badge */
+.key-num {
+  display: flex;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: #f4efe6;
+  background: linear-gradient(180deg, #2c2925 0%, #131210 100%);
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, 0.7),
+    0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.key-label {
+  flex: 1;
+  font-family: var(--font-grunge, "Road Rage", Impact, sans-serif);
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  /* pressed-in letters: a thin white line under them */
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+`;
+
 function Icon({ d }) {
   return (
     <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor"
@@ -51,7 +133,7 @@ function Icon({ d }) {
 }
 
 // one menu key: hover lifts it, clicking pushes it down, and the current page stays pressed in.
-// NavLink adds aria-current="page" to the current page by itself; index.css uses that.
+// NavLink adds aria-current="page" to the current page by itself; keyStyles uses that.
 function NavItem({ link, onPick }) {
   return (
     <NavLink to={link.to} end={link.end} onClick={onPick} className="key">
@@ -109,6 +191,7 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
+      <style>{keyStyles}</style>
       {/* desktop: side navigation */}
       <aside className="hidden shrink-0 flex-col border-r-2 border-paper bg-night/70 p-6 md:sticky md:top-0 md:flex md:h-screen md:w-72 md:overflow-y-auto">
         <Logo />
