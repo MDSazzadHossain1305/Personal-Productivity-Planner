@@ -49,31 +49,130 @@ const focusTotal = (plan) => plan.filter((s) => s.kind === 'focus').reduce((t, s
 const breakTotal = (plan) => plan.filter((s) => s.kind === 'break').reduce((t, s) => t + s.minutes, 0);
 const describe = (plan) => plan.map((s) => `${stepName(s)} ${s.minutes}`).join(' + ');
 
-// alarm: three short beeps made with the Web Audio API (no sound file needed)
-function alarm(ctx) {
-  if (!ctx || !soundOn()) return;
+// ---- alarm (Web Audio API: the sound is generated, no sound file is needed) ----
+const ALARM_SOUNDS = [
+  { id: 'digital', label: 'Digital (double beep)' },
+  { id: 'beep', label: 'Beep' },
+  { id: 'bell', label: 'Bell' },
+  { id: 'chime', label: 'Chime (two notes)' },
+  { id: 'siren', label: 'Siren' },
+];
+// volume in %, seconds = how long it rings, pitch = sound frequency in Hz, rate = repeats per second
+const DEFAULT_ALARM = { sound: 'digital', volume: 100, seconds: 8, pitch: 880, rate: 3 };
+
+const loadAlarm = () => {
+  try {
+    const a = JSON.parse(localStorage.getItem('alarmSettings'));
+    if (a && ALARM_SOUNDS.some((s) => s.id === a.sound)) return { ...DEFAULT_ALARM, ...a };
+  } catch {
+    /* nothing saved yet */
+  }
+  return DEFAULT_ALARM;
+};
+const saveAlarm = (a) => {
+  try {
+    localStorage.setItem('alarmSettings', JSON.stringify(a));
+  } catch {
+    /* storage blocked */
+  }
+};
+
+// plays the alarm and returns { stop, ms }: stop() silences it at once, ms is how long it rings
+function playAlarm(ctx, a) {
+  if (!ctx) return { stop: () => {}, ms: 0 };
   try {
     ctx.resume();
-    [0, 0.35, 0.7].forEach((t) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.frequency.value = 880;
-      gain.gain.value = 0.3;
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(ctx.currentTime + t);
-      osc.stop(ctx.currentTime + t + 0.25);
-    });
   } catch {
-    /* sound is optional */
+    /* ignore */
   }
+  const t0 = ctx.currentTime + 0.05;
+  const end = t0 + a.seconds;
+  const master = ctx.createGain();
+  master.gain.value = a.volume / 100;
+  // the compressor keeps a loud alarm clean instead of crackling
+  const comp = ctx.createDynamicsCompressor();
+  master.connect(comp);
+  comp.connect(ctx.destination);
+  const oscs = [];
+
+  // one note: a quick fade in, then either a held tone or a bell-like fade out
+  const tone = (start, length, freq, type, peak, ring) => {
+    if (start >= end) return;
+    const len = Math.max(0.05, length);
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(peak, start + 0.01);
+    if (!ring) g.gain.setValueAtTime(peak, start + len - 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + len);
+    osc.connect(g);
+    g.connect(master);
+    osc.start(start);
+    osc.stop(start + len + 0.02);
+    oscs.push(osc);
+  };
+
+  const step = 1 / a.rate; // time between two repeats
+  if (a.sound === 'siren') {
+    // one tone that slides up and down
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sawtooth';
+    g.gain.value = 0.6;
+    for (let t = t0; t < end; t += step) {
+      osc.frequency.setValueAtTime(a.pitch, t);
+      osc.frequency.linearRampToValueAtTime(a.pitch * 1.6, Math.min(t + step / 2, end));
+      osc.frequency.linearRampToValueAtTime(a.pitch, Math.min(t + step, end));
+    }
+    g.gain.setValueAtTime(0.6, end - 0.05);
+    g.gain.linearRampToValueAtTime(0.0001, end);
+    osc.connect(g);
+    g.connect(master);
+    osc.start(t0);
+    osc.stop(end);
+    oscs.push(osc);
+  } else {
+    let n = 0;
+    for (let t = t0; t < end; t += step, n += 1) {
+      if (a.sound === 'beep') {
+        tone(t, step * 0.5, a.pitch, 'square', 0.6, false);
+      } else if (a.sound === 'digital') {
+        const len = Math.min(0.09, step * 0.25);
+        tone(t, len, a.pitch, 'square', 0.6, false);
+        tone(t + Math.min(0.13, step * 0.4), len, a.pitch, 'square', 0.6, false);
+      } else if (a.sound === 'bell') {
+        tone(t, Math.min(1.5, step * 0.95), a.pitch, 'sine', 1, true);
+        tone(t, Math.min(1.2, step * 0.9), a.pitch * 2.76, 'sine', 0.4, true); // the bright "ding" of a bell
+      } else {
+        tone(t, step * 0.9, n % 2 ? a.pitch * 1.25 : a.pitch, 'triangle', 0.9, true); // chime: two notes in turn
+      }
+    }
+  }
+
+  const stop = () => {
+    oscs.forEach((o) => {
+      try {
+        o.stop();
+      } catch {
+        /* already stopped */
+      }
+    });
+    try {
+      master.disconnect();
+    } catch {
+      /* ignore */
+    }
+  };
+  return { stop, ms: a.seconds * 1000 + 100 };
 }
 
 // a pop-up from the browser, shown even when another tab is open
 function notify(text) {
   try {
     if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('Kaajkormo focus timer', { body: text, icon: '/favicon.svg' });
+      new Notification('Kaajkormo focus timer', { body: text, icon: '/favicon.svg', requireInteraction: true });
     }
   } catch {
     /* notifications are optional */
@@ -95,6 +194,55 @@ export default function Focus() {
   // { plan, label, index, endAt, left, focusDone }
   const run = useRef(null);
   const audio = useRef(null);
+
+  // alarm settings and the alarm that is ringing now
+  const [alarmCfg, setAlarmCfg] = useState(loadAlarm);
+  const [ringing, setRinging] = useState(false);
+  const ring = useRef(null); // { stop, timer }
+  const alarmRef = useRef(alarmCfg);
+  alarmRef.current = alarmCfg;
+
+  const ensureAudio = () => {
+    try {
+      if (!audio.current) audio.current = new (window.AudioContext || window.webkitAudioContext)();
+    } catch {
+      /* no sound in this browser */
+    }
+  };
+
+  const stopAlarm = useCallback(() => {
+    const r = ring.current;
+    if (!r) return;
+    r.stop();
+    clearTimeout(r.timer);
+    ring.current = null;
+    setRinging(false);
+  }, []);
+
+  // force = true for the Test button, so it plays even if sound is switched off in Settings
+  const soundAlarm = (force = false) => {
+    if (!force && !soundOn()) return;
+    ensureAudio();
+    stopAlarm();
+    const played = playAlarm(audio.current, alarmRef.current);
+    ring.current = {
+      stop: played.stop,
+      timer: setTimeout(() => {
+        ring.current = null;
+        setRinging(false);
+      }, played.ms),
+    };
+    setRinging(true);
+  };
+
+  // silence the alarm when the user leaves the page
+  useEffect(() => stopAlarm, [stopAlarm]);
+
+  const setAlarm = (key, value) => {
+    const next = { ...alarmCfg, [key]: value };
+    setAlarmCfg(next);
+    saveAlarm(next);
+  };
 
   const editable = status === 'idle' || status === 'finished';
 
@@ -154,7 +302,7 @@ export default function Focus() {
 
   const finish = (r) => {
     run.current = null;
-    alarm(audio.current);
+    soundAlarm();
     const text = 'All steps are finished. Great work! You can start it again any time from History.';
     notify(text);
     setNotice(text);
@@ -192,7 +340,7 @@ export default function Focus() {
           next.kind === 'break'
             ? `Focus time is over. Break of ${next.minutes} min has started.`
             : `Break is over. Focus of ${next.minutes} min has started.`;
-        alarm(audio.current);
+        soundAlarm();
         notify(text);
         setNotice(text);
         setStepIndex(r.index);
@@ -216,11 +364,7 @@ export default function Focus() {
     setError('');
     if (!p.some((s) => s.kind === 'focus')) return setError('The plan needs at least one focus step.');
     // the click on Start allows sound and lets us ask for notifications
-    try {
-      if (!audio.current) audio.current = new (window.AudioContext || window.webkitAudioContext)();
-    } catch {
-      /* no sound */
-    }
+    ensureAudio();
     try {
       if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
     } catch {
@@ -252,6 +396,7 @@ export default function Focus() {
 
   // stop: ends the whole run early. The focus time done so far is saved as "Stopped early".
   const stop = async () => {
+    stopAlarm();
     const r = run.current;
     if (!r) return;
     const step = r.plan[r.index];
@@ -269,6 +414,7 @@ export default function Focus() {
 
   // reset: back to the first step, nothing is saved
   const reset = () => {
+    stopAlarm();
     run.current = null;
     setStatus('idle');
     setStepIndex(0);
@@ -386,6 +532,7 @@ export default function Focus() {
             {status === 'paused' && <button className="btn-primary px-8" onClick={resume}>Resume</button>}
             {!editable && <button className="btn-danger" onClick={stop}>Stop</button>}
             {!editable && <button className="btn-ghost" onClick={reset}>Reset</button>}
+            {ringing && <button className="btn-danger" onClick={stopAlarm}>Stop alarm</button>}
           </div>
           <p className="mt-3 max-w-sm text-center text-xs text-faint">
             Each break starts by itself when a focus step ends, with an alarm and a browser notification. Allow notifications when Chrome asks.
@@ -430,6 +577,63 @@ export default function Focus() {
               Focus {focusTotal(plan)} min + break {breakTotal(plan)} min = {focusTotal(plan) + breakTotal(plan)} min in total.
             </p>
             <p className="text-xs text-faint">The plan can be changed while the timer is not running. Up to {MAX_STEPS} steps.</p>
+          </div>
+
+          {/* alarm settings */}
+          <div className="card space-y-3">
+            <h2 className="heading text-32">Alarm</h2>
+            <div>
+              <label className="label" htmlFor="alarm-sound">Sound</label>
+              <select id="alarm-sound" className="input" value={alarmCfg.sound} onChange={(e) => setAlarm('sound', e.target.value)}>
+                {ALARM_SOUNDS.map((x) => (
+                  <option key={x.id} value={x.id}>{x.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="alarm-volume">Volume: {alarmCfg.volume}%</label>
+              <input
+                id="alarm-volume" type="range" min="10" max="100" step="5" className="w-full accent-[var(--color-brass)]"
+                value={alarmCfg.volume} onChange={(e) => setAlarm('volume', clamp(e.target.value, 10, 100))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label" htmlFor="alarm-seconds">Rings for (sec)</label>
+                <input
+                  id="alarm-seconds" type="number" min="1" max="60" className="input"
+                  value={alarmCfg.seconds} onChange={(e) => setAlarm('seconds', clamp(e.target.value, 1, 60))}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="alarm-rate">Repeats / sec</label>
+                <input
+                  id="alarm-rate" type="number" min="1" max="6" className="input"
+                  value={alarmCfg.rate} onChange={(e) => setAlarm('rate', clamp(e.target.value, 1, 6))}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="label" htmlFor="alarm-pitch">Pitch (frequency): {alarmCfg.pitch} Hz</label>
+              <input
+                id="alarm-pitch" type="range" min="200" max="2000" step="10" className="w-full accent-[var(--color-brass)]"
+                value={alarmCfg.pitch} onChange={(e) => setAlarm('pitch', clamp(e.target.value, 200, 2000))}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-ghost btn-sm" onClick={() => soundAlarm(true)}>Test alarm</button>
+              {ringing && <button className="btn-danger btn-sm" onClick={stopAlarm}>Stop alarm</button>}
+              <button
+                className="btn-ghost btn-sm"
+                onClick={() => {
+                  setAlarmCfg(DEFAULT_ALARM);
+                  saveAlarm(DEFAULT_ALARM);
+                }}
+              >
+                Default
+              </button>
+            </div>
+            <p className="text-xs text-faint">Saved in this browser. About 400 Hz sounds deep; 1000 Hz and above is sharp and easier to hear.</p>
           </div>
 
           <div className="grid grid-cols-3 border-y border-line">
