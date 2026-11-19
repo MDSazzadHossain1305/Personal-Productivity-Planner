@@ -57,37 +57,56 @@ router.post('/', async (req, res) => {
   res.status(201).json({ habit: out(habit) });
 });
 
-// PUT /api/habits/:id   body: { name, description, frequency }
+// PUT /api/habits/:id   body: { name, description, frequency, days }
+// days = the past days changed in the Edit window, e.g. { "2026-11-17": true, "2026-11-16": false }
+// This is the ONLY way to change or remove a day that was already marked done.
 router.put('/:id', async (req, res) => {
   const habit = await findOwn(req, res);
   if (!habit) return;
-  const { name, description, frequency } = req.body;
-  if (name !== undefined) {
-    if (!name.trim()) return res.status(400).json({ message: 'Name cannot be empty' });
-    habit.name = name;
+  const { name, description, frequency, days } = req.body;
+  if (name !== undefined && !name.trim()) return res.status(400).json({ message: 'Name cannot be empty' });
+  if (frequency !== undefined && !['daily', 'weekly'].includes(frequency)) {
+    return res.status(400).json({ message: 'Frequency must be daily or weekly' });
   }
+  if (days !== undefined) {
+    if (typeof days !== 'object' || days === null || Array.isArray(days)) {
+      return res.status(400).json({ message: 'days must be an object of date: true/false' });
+    }
+    const today = todayISO();
+    for (const [date, done] of Object.entries(days)) {
+      if (!isDate(date)) return res.status(400).json({ message: `Not a valid date: ${date}` });
+      if (date > today) return res.status(400).json({ message: 'You cannot complete a habit in the future' });
+      if (dayNumber(today) - dayNumber(date) > 60) return res.status(400).json({ message: 'Date is too far in the past' });
+      if (typeof done !== 'boolean') return res.status(400).json({ message: `Value for ${date} must be true or false` });
+    }
+  }
+
+  if (name !== undefined) habit.name = name;
   if (description !== undefined) habit.description = description;
-  if (frequency !== undefined) {
-    if (!['daily', 'weekly'].includes(frequency)) return res.status(400).json({ message: 'Frequency must be daily or weekly' });
-    habit.frequency = frequency;
+  if (frequency !== undefined) habit.frequency = frequency;
+  if (days !== undefined) {
+    const set = new Set(habit.completions);
+    for (const [date, done] of Object.entries(days)) {
+      if (done) set.add(date);
+      else set.delete(date);
+    }
+    habit.completions = [...set].sort();
   }
   await habit.save();
   res.json({ habit: out(habit) });
 });
 
-// POST /api/habits/:id/complete   body: { date }   (date optional, default today)
-// Marks the habit done for that day. Calling it again for the same day undoes it.
+// POST /api/habits/:id/complete
+// Marks TODAY as done. It is permanent: pressing it again changes nothing.
+// To change a day afterwards, the user must use Edit (PUT above).
 router.post('/:id/complete', async (req, res) => {
   const habit = await findOwn(req, res);
   if (!habit) return;
   const today = todayISO();
-  const date = req.body.date || today;
-  if (!isDate(date)) return res.status(400).json({ message: 'Date must be YYYY-MM-DD' });
-  if (date > today) return res.status(400).json({ message: 'You cannot complete a habit in the future' });
-  if (dayNumber(today) - dayNumber(date) > 60) return res.status(400).json({ message: 'Date is too far in the past' });
-  if (habit.completions.includes(date)) habit.completions.pull(date);
-  else habit.completions.push(date);
-  await habit.save();
+  if (!habit.completions.includes(today)) {
+    habit.completions.push(today);
+    await habit.save();
+  }
   res.json({ habit: out(habit) });
 });
 
