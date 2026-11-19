@@ -15,41 +15,66 @@ const nice = (s) => {
   return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 };
 
-// A small calendar of the last 28 days, one row per week (Sunday to Saturday).
-// days = [{ date: "YYYY-MM-DD", done, was? }]. If onPick is given, the days can be clicked (Edit window).
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const pad = (n) => String(n).padStart(2, '0');
+
+// A month calendar that starts on the 1st, one row per week (Sunday to Saturday).
+// days = [{ date: "YYYY-MM-DD", done, was? }] from the 1st of last month to today.
+// The arrows switch between last month and this month. If onPick is given, days can be clicked (Edit window).
 function HabitCalendar({ days, onPick }) {
-  if (!days.length) return null;
-  const first = toDate(days[0].date);
-  const last = toDate(days[days.length - 1].date);
-  const cells = [
-    ...Array.from({ length: first.getDay() }, () => null), // empty boxes before the first day
-    ...days,
-    ...Array.from({ length: 6 - last.getDay() }, () => null), // empty boxes after today
-  ];
   const today = days[days.length - 1].date;
-  const range = `${first.getDate()} ${MONTHS[first.getMonth()]} to ${last.getDate()} ${MONTHS[last.getMonth()]} ${last.getFullYear()}`;
+  const firstMonth = days[0].date.slice(0, 7); // "YYYY-MM"
+  const thisMonth = today.slice(0, 7);
+  const [month, setMonth] = useState(thisMonth);
+
+  const byDate = Object.fromEntries(days.map((d) => [d.date, d]));
+  const [y, m] = month.split('-').map(Number);
+  const startDay = new Date(y, m - 1, 1).getDay(); // 0 = Sunday
+  const count = new Date(y, m, 0).getDate(); // days in this month
+  const cells = [...Array.from({ length: startDay }, () => null)];
+  for (let n = 1; n <= count; n += 1) cells.push(`${month}-${pad(n)}`);
+  while (cells.length % 7) cells.push(null);
+
+  const doneHere = days.filter((d) => d.done && d.date.startsWith(month)).length;
+  const daysSoFar = month === thisMonth ? Number(today.slice(8)) : count;
+  const go = (step) => {
+    const d = new Date(y, m - 1 + step, 1);
+    setMonth(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
+  };
+
   return (
     <div>
-      <p className="mb-1 text-xs text-muted">{range}</p>
+      <div className="mb-2 flex items-center justify-between">
+        <button type="button" className="btn-ghost btn-sm" onClick={() => go(-1)} disabled={month <= firstMonth} aria-label="Last month">&lt;</button>
+        <p className="text-sm text-paper">
+          {MONTH_NAMES[m - 1]} {y}
+          <span className="ml-2 text-xs text-muted">done {doneHere} of {daysSoFar} days</span>
+        </p>
+        <button type="button" className="btn-ghost btn-sm" onClick={() => go(1)} disabled={month >= thisMonth} aria-label="Next month">&gt;</button>
+      </div>
       <div className="grid grid-cols-7 gap-1 text-center">
         {WEEKDAYS.map((w) => (
           <span key={w} className="text-[10px] uppercase text-faint">{w}</span>
         ))}
-        {cells.map((d, i) => {
-          if (!d) return <span key={`x${i}`} />;
-          const day = toDate(d.date);
-          const text = day.getDate() === 1 || i === first.getDay() ? `${day.getDate()} ${MONTHS[day.getMonth()]}` : day.getDate();
+        {cells.map((date, i) => {
+          if (!date) return <span key={`x${i}`} />;
+          const d = byDate[date];
+          const n = Number(date.slice(8));
+          if (!d) {
+            // a day after today: shown, but it cannot be marked yet
+            return <span key={date} className="border border-line/40 py-1.5 text-xs text-faint/50">{n}</span>;
+          }
           const look = `${d.done ? 'border-brass bg-brass text-night font-semibold' : 'border-line bg-night text-muted'} ${
-            d.date === today ? 'ring-2 ring-paper ring-offset-1 ring-offset-night' : ''
+            date === today ? 'ring-2 ring-paper ring-offset-1 ring-offset-night' : ''
           } ${onPick && d.done !== d.was ? 'outline outline-2 outline-offset-2 outline-sage' : ''}`;
-          const title = `${nice(d.date)}${d.done ? ': done' : ': not done'}${d.date === today ? ' (today)' : ''}`;
+          const title = `${nice(date)}${d.done ? ': done' : ': not done'}${date === today ? ' (today)' : ''}`;
           return onPick ? (
-            <button type="button" key={d.date} title={title} onClick={() => onPick(d.date)} className={`border py-1.5 text-xs hover:border-faint ${look}`}>
-              {text}
+            <button type="button" key={date} title={title} onClick={() => onPick(date)} className={`border py-1.5 text-xs hover:border-faint ${look}`}>
+              {n}
             </button>
           ) : (
-            <span key={d.date} title={title} className={`border py-1.5 text-xs ${look}`}>
-              {text}
+            <span key={date} title={title} className={`border py-1.5 text-xs ${look}`}>
+              {n}
             </span>
           );
         })}
@@ -64,7 +89,7 @@ export default function Habits() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
-  const [days, setDays] = useState([]); // the 28 days shown in the Edit window: [{ date, done, was }]
+  const [days, setDays] = useState([]); // the days shown in the Edit window: [{ date, done, was }]
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -205,7 +230,7 @@ export default function Habits() {
               </div>
 
               <div>
-                <p className="mb-2 text-xs text-faint">Last 28 days. Yellow = done, white ring = today. To change a day, click Edit.</p>
+                <p className="mb-2 text-xs text-faint">Yellow = done, white ring = today. To change a day, click Edit.</p>
                 <HabitCalendar days={h.history} />
               </div>
 
@@ -239,7 +264,7 @@ export default function Habits() {
           </div>
           {editingId && (
             <div>
-              <label className="label">Done days (last 28 days)</label>
+              <label className="label">Done days (this month and last month)</label>
               <p className="mb-2 text-xs text-faint">Click a date to mark it done or not done. Nothing changes until you click Save changes.</p>
               <HabitCalendar days={days} onPick={toggleDay} />
               {changedCount > 0 && <p className="mt-2 text-xs text-sage">{changedCount} day(s) changed</p>}

@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { Habit } from '../models2.js';
 import { requireAuth } from '../auth.js';
-import { addDays, dayNumber, isDate, iso, mondayOf, todayISO } from '../dates.js';
+import { addDays, dayNumber, isDate, iso, mondayOf, parse, todayISO } from '../dates.js';
 import { dailyStats, weeklyStats } from '../streak.js';
 
 const router = Router();
 router.use(requireAuth);
 
-// habit + streak, consistency and the last 28 days of history
+// habit + streak, consistency and the history from the 1st of last month up to today
 function out(habit) {
   const today = todayISO();
   const dates = habit.completions;
@@ -18,9 +18,10 @@ function out(habit) {
   const thisWeek = mondayOf(today);
   const doneNow =
     habit.frequency === 'weekly' ? dates.some((d) => mondayOf(d) === thisWeek) : set.has(today);
+  // every day from the 1st of LAST month to today, so the page can show this month and last month
+  const t = parse(today);
   const history = [];
-  for (let i = 27; i >= 0; i -= 1) {
-    const d = addDays(today, -i);
+  for (let d = iso(new Date(t.getFullYear(), t.getMonth() - 1, 1)); d <= today; d = addDays(d, 1)) {
     history.push({ date: d, done: set.has(d) });
   }
   return {
@@ -76,7 +77,7 @@ router.put('/:id', async (req, res) => {
     for (const [date, done] of Object.entries(days)) {
       if (!isDate(date)) return res.status(400).json({ message: `Not a valid date: ${date}` });
       if (date > today) return res.status(400).json({ message: 'You cannot complete a habit in the future' });
-      if (dayNumber(today) - dayNumber(date) > 60) return res.status(400).json({ message: 'Date is too far in the past' });
+      if (dayNumber(today) - dayNumber(date) > 62) return res.status(400).json({ message: 'Only this month and last month can be changed' });
       if (typeof done !== 'boolean') return res.status(400).json({ message: `Value for ${date} must be true or false` });
     }
   }
