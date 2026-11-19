@@ -4,6 +4,60 @@ import Modal from '../components/Modal';
 
 const emptyForm = { name: '', description: '', frequency: 'daily' };
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const toDate = (s) => {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+const nice = (s) => {
+  const d = toDate(s);
+  return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+};
+
+// A small calendar of the last 28 days, one row per week (Sunday to Saturday).
+// days = [{ date: "YYYY-MM-DD", done, was? }]. If onPick is given, the days can be clicked (Edit window).
+function HabitCalendar({ days, onPick }) {
+  if (!days.length) return null;
+  const first = toDate(days[0].date);
+  const last = toDate(days[days.length - 1].date);
+  const cells = [
+    ...Array.from({ length: first.getDay() }, () => null), // empty boxes before the first day
+    ...days,
+    ...Array.from({ length: 6 - last.getDay() }, () => null), // empty boxes after today
+  ];
+  const today = days[days.length - 1].date;
+  const range = `${first.getDate()} ${MONTHS[first.getMonth()]} to ${last.getDate()} ${MONTHS[last.getMonth()]} ${last.getFullYear()}`;
+  return (
+    <div>
+      <p className="mb-1 text-xs text-muted">{range}</p>
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {WEEKDAYS.map((w) => (
+          <span key={w} className="text-[10px] uppercase text-faint">{w}</span>
+        ))}
+        {cells.map((d, i) => {
+          if (!d) return <span key={`x${i}`} />;
+          const day = toDate(d.date);
+          const text = day.getDate() === 1 || i === first.getDay() ? `${day.getDate()} ${MONTHS[day.getMonth()]}` : day.getDate();
+          const look = `${d.done ? 'border-brass bg-brass text-night font-semibold' : 'border-line bg-night text-muted'} ${
+            d.date === today ? 'ring-2 ring-paper ring-offset-1 ring-offset-night' : ''
+          } ${onPick && d.done !== d.was ? 'outline outline-2 outline-offset-2 outline-sage' : ''}`;
+          const title = `${nice(d.date)}${d.done ? ': done' : ': not done'}${d.date === today ? ' (today)' : ''}`;
+          return onPick ? (
+            <button type="button" key={d.date} title={title} onClick={() => onPick(d.date)} className={`border py-1.5 text-xs hover:border-faint ${look}`}>
+              {text}
+            </button>
+          ) : (
+            <span key={d.date} title={title} className={`border py-1.5 text-xs ${look}`}>
+              {text}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function Habits() {
   const [habits, setHabits] = useState([]);
   const [tab, setTab] = useState('active');
@@ -120,6 +174,10 @@ export default function Habits() {
                   <h3 className="heading text-32">{h.name}</h3>
                   {h.description && <p className="text-sm text-muted">{h.description}</p>}
                   <span className="mt-1 inline-block border border-line px-2 py-0.5 text-xs capitalize text-muted">{h.frequency}</span>
+                  <p className="mt-2 text-xs text-muted">
+                    Today: {nice(h.history[h.history.length - 1].date)}
+                    {h.doneNow && <span className="text-sage"> / marked done</span>}
+                  </p>
                 </div>
                 {tab === 'active' && (
                   <button
@@ -147,16 +205,8 @@ export default function Habits() {
               </div>
 
               <div>
-                <p className="mb-2 text-xs text-faint">Last 28 days (to change a day, click Edit)</p>
-                <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(14, minmax(0, 1fr))' }}>
-                  {h.history.map((d) => (
-                    <div
-                      key={d.date}
-                      title={`${d.date}${d.done ? ': done' : ''}`}
-                      className={`aspect-square border ${d.done ? 'border-brass bg-brass' : 'border-line bg-night'}`}
-                    />
-                  ))}
-                </div>
+                <p className="mb-2 text-xs text-faint">Last 28 days. Yellow = done, white ring = today. To change a day, click Edit.</p>
+                <HabitCalendar days={h.history} />
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -190,20 +240,8 @@ export default function Habits() {
           {editingId && (
             <div>
               <label className="label">Done days (last 28 days)</label>
-              <p className="mb-2 text-xs text-faint">Click a square to add or remove a day. Nothing changes until you click Save changes.</p>
-              <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
-                {days.map((d) => (
-                  <button
-                    type="button"
-                    key={d.date}
-                    onClick={() => toggleDay(d.date)}
-                    title={d.date}
-                    className={`border px-1 py-1.5 text-xs ${d.done ? 'border-brass bg-brass text-night' : 'border-line bg-night text-muted hover:border-faint'} ${d.done !== d.was ? 'outline outline-2 outline-offset-1 outline-sage' : ''}`}
-                  >
-                    {Number(d.date.slice(8))}
-                  </button>
-                ))}
-              </div>
+              <p className="mb-2 text-xs text-faint">Click a date to mark it done or not done. Nothing changes until you click Save changes.</p>
+              <HabitCalendar days={days} onPick={toggleDay} />
               {changedCount > 0 && <p className="mt-2 text-xs text-sage">{changedCount} day(s) changed</p>}
             </div>
           )}
