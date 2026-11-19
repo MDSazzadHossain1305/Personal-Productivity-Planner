@@ -10,6 +10,7 @@ export default function Habits() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [days, setDays] = useState([]); // the 28 days shown in the Edit window: [{ date, done, was }]
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -39,27 +40,35 @@ export default function Habits() {
   const openNew = () => {
     setEditingId(null);
     setForm(emptyForm);
+    setDays([]);
     setModalOpen(true);
   };
   const openEdit = (h) => {
     setEditingId(h.id);
     setForm({ name: h.name, description: h.description, frequency: h.frequency });
+    setDays(h.history.map((d) => ({ date: d.date, done: d.done, was: d.done })));
     setModalOpen(true);
   };
   const setField = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const toggleDay = (date) => setDays(days.map((d) => (d.date === date ? { ...d, done: !d.done } : d)));
 
   const submit = (e) => {
     e.preventDefault();
     run(async () => {
-      if (editingId) await api.put(`/habits/${editingId}`, form);
-      else await api.post('/habits', form);
+      if (editingId) {
+        // send only the days that were changed in this window
+        const changed = Object.fromEntries(days.filter((d) => d.done !== d.was).map((d) => [d.date, d.done]));
+        await api.put(`/habits/${editingId}`, { ...form, days: changed });
+      } else {
+        await api.post('/habits', form);
+      }
       setModalOpen(false);
       load();
     });
   };
 
-  // marks the habit done today; pressing it again undoes it
-  const complete = (h, date) => run(async () => swap((await api.post(`/habits/${h.id}/complete`, date ? { date } : {})).data.habit));
+  // marks TODAY done. It is saved for good: to change it later, use Edit.
+  const complete = (h) => run(async () => swap((await api.post(`/habits/${h.id}/complete`)).data.habit));
   const archive = (h, archived) => run(async () => {
     await api.patch(`/habits/${h.id}/archive`, { archived });
     load();
@@ -73,6 +82,7 @@ export default function Habits() {
   };
 
   const totalDone = habits.filter((h) => h.doneNow).length;
+  const changedCount = days.filter((d) => d.done !== d.was).length;
 
   return (
     <div className="space-y-4">
@@ -112,8 +122,13 @@ export default function Habits() {
                   <span className="mt-1 inline-block border border-line px-2 py-0.5 text-xs capitalize text-muted">{h.frequency}</span>
                 </div>
                 {tab === 'active' && (
-                  <button className={h.doneNow ? 'btn-ghost shrink-0' : 'btn-primary shrink-0'} onClick={() => complete(h)}>
-                    {h.doneNow ? (h.doneToday ? 'Undo today' : 'Done this week') : h.frequency === 'weekly' ? 'Done this week' : 'Mark done'}
+                  <button
+                    className={h.doneNow ? 'btn-ghost shrink-0' : 'btn-primary shrink-0'}
+                    onClick={() => complete(h)}
+                    disabled={h.doneNow}
+                    title={h.doneNow ? 'Saved. Use Edit to change it.' : undefined}
+                  >
+                    {h.doneNow ? (h.frequency === 'weekly' ? 'Done this week' : 'Done today') : h.frequency === 'weekly' ? 'Done this week?' : 'Mark done'}
                   </button>
                 )}
               </div>
@@ -132,15 +147,13 @@ export default function Habits() {
               </div>
 
               <div>
-                <p className="mb-2 text-xs text-faint">Last 28 days (tap a square to fix a day)</p>
+                <p className="mb-2 text-xs text-faint">Last 28 days (to change a day, click Edit)</p>
                 <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(14, minmax(0, 1fr))' }}>
                   {h.history.map((d) => (
-                    <button
+                    <div
                       key={d.date}
-                      title={d.date}
-                      disabled={tab === 'archived'}
-                      onClick={() => complete(h, d.date)}
-                      className={`aspect-square rounded-sm border ${d.done ? 'border-brass bg-brass' : 'border-line bg-night hover:border-faint'}`}
+                      title={`${d.date}${d.done ? ': done' : ''}`}
+                      className={`aspect-square border ${d.done ? 'border-brass bg-brass' : 'border-line bg-night'}`}
                     />
                   ))}
                 </div>
@@ -174,6 +187,26 @@ export default function Habits() {
               <option value="weekly">Weekly</option>
             </select>
           </div>
+          {editingId && (
+            <div>
+              <label className="label">Done days (last 28 days)</label>
+              <p className="mb-2 text-xs text-faint">Click a square to add or remove a day. Nothing changes until you click Save changes.</p>
+              <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
+                {days.map((d) => (
+                  <button
+                    type="button"
+                    key={d.date}
+                    onClick={() => toggleDay(d.date)}
+                    title={d.date}
+                    className={`border px-1 py-1.5 text-xs ${d.done ? 'border-brass bg-brass text-night' : 'border-line bg-night text-muted hover:border-faint'} ${d.done !== d.was ? 'outline outline-2 outline-offset-1 outline-sage' : ''}`}
+                  >
+                    {Number(d.date.slice(8))}
+                  </button>
+                ))}
+              </div>
+              {changedCount > 0 && <p className="mt-2 text-xs text-sage">{changedCount} day(s) changed</p>}
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-ghost" onClick={() => setModalOpen(false)}>Cancel</button>
             <button className="btn-primary">{editingId ? 'Save changes' : 'Create habit'}</button>
